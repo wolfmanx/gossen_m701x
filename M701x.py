@@ -10,7 +10,52 @@
 
 import re,sys,string,serial,time
 
-class M701x:
+try:
+  from pyjsmo.compat import uc_type, ucs, nts
+  from pyjsmo.compat import sformat, printf, printe, dbg_fwid
+except ImportError:
+  def _ucs(string, charset=None):                            # ||:fnc:||
+    return unicode(string, charset or 'utf-8')
+  try:
+    _ucs("")
+  except NameError:
+    _ucs = lambda s, c=None: s.decode(c or 'utf-8')
+
+  try:
+    exec('uc_type = type(_ucs(b""))')
+  except SyntaxError:
+    uc_type = type(_ucs(""))
+
+  def ucs(value, charset=None):                              # ||:fnc:||
+    if not isinstance(value, uc_type):
+      return _ucs(value, charset)
+    return value
+
+  def nts(string):
+    # for python3, unicode strings have type str
+    if isinstance(string, str):
+        return string
+    # for python2, encode unicode strings to utf-8 strings
+    if isinstance(string, uc_type):
+        return string.encode('utf-8')
+    return string
+
+  def sformat (fmtspec, *args, **kwargs):
+    return fmtspec.format(*args, **kwargs)
+
+  try:
+    printf = eval("print") # python 3.0 case
+  except SyntaxError:
+    printf_dict = dict()
+    exec("from __future__ import print_function\nprintf=print", printf_dict)
+    printf = printf_dict["printf"] # 2.6 case
+    del printf_dict
+
+  printe = printf
+
+  dbg_fwid = 25
+
+class M701x(object):
   """ Class for interfacing with Gossen Metrawatt devices over serial """
 
   # M701x has a rate limit of 1 call per second?!
