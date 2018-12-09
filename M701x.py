@@ -268,27 +268,22 @@ class M701x(object):
     returnstr = ''
     while i < partcount-1:
       checksum = parts[i+1][:2].lower() # the checksum is on the next parts first two chars as we split on $
-      if (checksum == self._checksum(parts[i][3:])): # multi line case for lines with first three chars like 'XX;' checksum and a delimiter
+      if (checksum == self._checksum(parts[i][3:], STString.transfer_encoding)): # multi line case for lines with first three chars like 'XX;' checksum and a delimiter
         returnstr += parts[i][2:] # subtract checksum but leave delimiter
-      elif (checksum == self._checksum(parts[i])): # first line case
+      elif (checksum == self._checksum(parts[i], STString.transfer_encoding)): # first line case
         returnstr += parts[i]
       else:
         return False
       i+=1
     return returnstr
 
-  def _write(self,str):
+  def _write(self, str, encoding=None):
     """ adds $-delimiter, checksum and line ending to str and sends it to the serial line """
-    self.__serial.write(str + '$' + self._checksum(str) + '\r\n')
+    _ustr = ucs(str, encoding)
+    _tstr = _ustr.encode(STString.transfer_encoding)
+    self.__serial.write(_tstr + '$' + self._checksum(_ustr) + '\r\n')
 
-  @staticmethod
-  def _checksum(str):
-    """ calculates checksum of a request/answer """
-    qsum_dec = ord('$')
-    for i in str:
-      d = ord(i)
-      qsum_dec += d
-    return "%02x" % (qsum_dec & 0xff)
+  _checksum = staticmethod(STString._checksum)
 
   def _flush(self):
     """ discards all waiting answers in the buffer """
