@@ -1,10 +1,12 @@
 #! /usr/bin/python
+# -*- coding: utf-8 -*-
 #
 # (C) 2014 juewei@fabfolk.com, All rights reserved.
 #
 # Distribute under MIT License or ask.
 #
 # Authors: mose@fabfolk.com, juewei@fabfolk.com
+# Modified: Wolfgang.Scherer@gmx.de
 
 import re,sys,string,serial,time
 
@@ -98,16 +100,43 @@ class M701x:
     return self.request('DAT'+idn+'!'+time.strftime("%d.%m.%y;%H:%M:%S"))
 
 if __name__ == "__main__":
-  m701 = M701x(sys.argv[1])
+  if len(sys.argv) < 2:
+    import os
+    for arg in ('/dev/ttyUSB0', '/dev/ttyS0'):
+      if os.path.exists(arg):
+        break
+    print('port: ' + arg)
+  else:
+    arg = sys.argv[1]
+
+  if arg == '--test':
+    import doctest
+    sys.exit(doctest.testmod())
+
+  m701 = M701x(arg)
   #m701._write("IDN?")
   #print m701._read()
 
-  print m701.request('IDN!0')
-  print m701.request('IDN?')
-  print m701.request('BEEP!')
-  #print m701.sync_clock('0')
-  #print m701.sync_clock('1')
-  print m701.request('WER?')
+  print(m701.request('IDN!0'))
+  print(m701.request('IDN?'))
+  print(m701.request('BEEP!'))
+
+  #print(m701.sync_clock())
+  #print(m701.sync_clock('1'))
+
+  #print(m701.request('WER?'))
 
   # str = "\x13DATIMx=20.09.14;18:33$18\r\n\x11"
   #         ^what             ^param        ^XOFF
+
+# :ide: COMPILE: Run with /dev/ttyUSB0
+# . (progn (save-buffer) (compile (concat "python ./" (file-name-nondirectory (buffer-file-name)) " /dev/ttyUSB0")))
+
+# :ide: COMPILE: Run with python3 --test
+# . (progn (save-buffer) (compile (concat "python3 ./" (file-name-nondirectory (buffer-file-name)) " --test")))
+
+# :ide: COMPILE: Run with python2 --test
+# . (progn (save-buffer) (compile (concat "python2 ./" (file-name-nondirectory (buffer-file-name)) " --test")))
+
+# :ide: COMPILE: Run w/o args
+# . (progn (save-buffer) (compile (concat "python ./" (file-name-nondirectory (buffer-file-name)) " ")))
