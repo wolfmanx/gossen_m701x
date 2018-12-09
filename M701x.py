@@ -222,6 +222,12 @@ class STString(uc_type):                                   # ||:cls:||
   def parse_raw(str):                                        # |:mth:|
     return STString.parse(str, STString.transfer_encoding)
 
+  def _slice(self, _from, _to):                             # |:mth:|
+    sstr = self.__class__(self[_from:_to])
+    for _attr in ('raw', 'uraw', 'parts', 'checksum_ok'):
+      setattr(sstr, _attr, getattr(self, _attr))
+    return sstr
+
   def __eq__(self, other):                                   # |:mth:|
     r"""If comparing to boolean True/False, compare self.checksum_ok"""
     if other in (True, False):
@@ -234,6 +240,8 @@ class STString(uc_type):                                   # ||:cls:||
       printf(nts(sformat(ucs('{1} {2} [{0}]'), *_p)))
 
 CHECKSUM_ERROR = STString.parse('$25')
+B_CRNL = ucs('\r\n').encode(STString.transfer_encoding)
+B_ACK = ucs('\x06').encode(STString.transfer_encoding)
 
 class M701x(object):
   """ Class for interfacing with Gossen Metrawatt devices over serial """
@@ -253,35 +261,28 @@ class M701x(object):
                     timeout=3,
                     xonxoff=True
                   )
-    # turn off local echo
-    self.__serial.write('\x06') # ACK
+
+    # turn off local echo # ACK
+    self.__serial.write(B_ACK)
 
     # r =  self.request('IDN!0')
     #
 
   def _read(self):
-    """ reads one line, removes CRLF and validates checksum. Returns read line or False on checksum error """
-    #return re.sub('[\r\n]+','',self.__serial.readline()) # uncomment for development and unprocessed return
-    parts = string.split(re.sub('[\r\n]+','',self.__serial.readline()),'$')
-    partcount = len(parts)
-    i = 0
-    returnstr = ''
-    while i < partcount-1:
-      checksum = parts[i+1][:2].lower() # the checksum is on the next parts first two chars as we split on $
-      if (checksum == self._checksum(parts[i][3:], STString.transfer_encoding)): # multi line case for lines with first three chars like 'XX;' checksum and a delimiter
-        returnstr += parts[i][2:] # subtract checksum but leave delimiter
-      elif (checksum == self._checksum(parts[i], STString.transfer_encoding)): # first line case
-        returnstr += parts[i]
-      else:
-        return False
-      i+=1
-    return returnstr
+    r"""reads one line, removes CRLF and validates checksum.
 
-  def _write(self, str, encoding=None):
+    :returns: :class:`STString` instance, which compares boolean values to checksum status:
+      ::
+
+        if _answer == True:
+          print('checksum OK')
+    """
+    return STString.parse_raw(self.__serial.readline())
+
+  def _write(self, string, encoding=None):
     """ adds $-delimiter, checksum and line ending to str and sends it to the serial line """
-    _ustr = ucs(str, encoding)
-    _tstr = _ustr.encode(STString.transfer_encoding)
-    self.__serial.write(_tstr + '$' + self._checksum(_ustr) + '\r\n')
+    sstr = STString.parse(string, encoding)
+    self.__serial.write(sstr.raw + B_CRNL)
 
   _checksum = staticmethod(STString._checksum)
 
@@ -292,6 +293,7 @@ class M701x(object):
   def request(self,command,retries=3):
     """ sends a command to device and parses reply """
     i = 0
+    answer = CHECKSUM_ERROR
     while i < retries:
       _d = time.time() - self._pyjsmo_x_last_req
       if _d < self._pyjsmo_x_rate_limit:
@@ -308,16 +310,16 @@ class M701x(object):
         continue
       # on NACK return False and full answer
       elif (answer[:2] == '.N'):
-        return False,answer
+        return False, answer._slice(2, None)
       # on ACK return True and address of device
       elif (answer[:2] == '.Y'):
-        return True,answer[2:3]
+        return True, answer._slice(2, None)
       # on 'string answer' or unhandled answer return None and full answer
       else:
         return None,answer
     # if not sucessful within retries return False
     else:
-      return False,'CHKSUM_ERROR'
+      return False,answer
 
   def sync_clock(self, idn=None):
     # needs more testing and ability to sync all devices (e.g. PSI + S2N)
@@ -325,6 +327,22 @@ class M701x(object):
     if idn is None:
       idn = ''
     return self.request('DAT'+idn+'!'+time.strftime("%d.%m.%y;%H:%M:%S"))
+
+  def vrequest_(self, method, *args):
+    _success, _answer = getattr(self, method)(*args)
+    printe(sformat(
+      "#    "":DBG:    {1:<{0}s}: ]{2!s:<14s}[ ]{3!s:<5s}[ ]{4!s}[", dbg_fwid,
+      "req/succ/answer", sformat('{0}({1})', method, ', '.join(args)),
+      _success, nts(_answer)))
+    if len(_answer.parts) > 1:
+      _answer._dump()
+    return _success, _answer
+
+  def vrequest(self, *args):
+    return self.vrequest_('request', *args)
+
+  def vsync_clock(self, *args):
+    return self.vrequest_('sync_clock', *args)
 
 if __name__ == "__main__":
   if len(sys.argv) < 2:
@@ -338,20 +356,24 @@ if __name__ == "__main__":
 
   if arg == '--test':
     import doctest
-    sys.exit(doctest.testmod())
+    sys.exit(doctest.testmod()[0])
 
   m701 = M701x(arg)
   #m701._write("IDN?")
   #print m701._read()
 
-  print(m701.request('IDN!0'))
-  print(m701.request('IDN?'))
-  print(m701.request('BEEP!'))
+  m701.vrequest('IDN!0')
+  m701.vrequest('IDN?')
+  m701.vrequest('BEEP!')
 
-  #print(m701.sync_clock())
-  #print(m701.sync_clock('1'))
+  m701.vrequest('XYZ?')
 
-  #print(m701.request('WER?'))
+  m701.vrequest('DAT?')
+  m701.vsync_clock()
+  m701.vrequest('DAT?')
+  #m701.vsync_clock('1')
+
+  m701.vrequest('WER?')
 
   # str = "\x13DATIMx=20.09.14;18:33$18\r\n\x11"
   #         ^what             ^param        ^XOFF
@@ -362,8 +384,11 @@ if __name__ == "__main__":
 # :ide: COMPILE: Run with python3 --test
 # . (progn (save-buffer) (compile (concat "python3 ./" (file-name-nondirectory (buffer-file-name)) " --test")))
 
+# :ide: COMPILE: Run with python3 w/o args
+# . (progn (save-buffer) (compile (concat "python3 ./" (file-name-nondirectory (buffer-file-name)) " ")))
+
 # :ide: COMPILE: Run with python2 --test
 # . (progn (save-buffer) (compile (concat "python2 ./" (file-name-nondirectory (buffer-file-name)) " --test")))
 
-# :ide: COMPILE: Run w/o args
-# . (progn (save-buffer) (compile (concat "python ./" (file-name-nondirectory (buffer-file-name)) " ")))
+# :ide: COMPILE: Run with python2 w/o args
+# . (progn (save-buffer) (compile (concat "python2 ./" (file-name-nondirectory (buffer-file-name)) " ")))
