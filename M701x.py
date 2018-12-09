@@ -12,6 +12,11 @@ import re,sys,string,serial,time
 
 class M701x:
   """ Class for interfacing with Gossen Metrawatt devices over serial """
+
+  # M701x has a rate limit of 1 call per second?!
+  _pyjsmo_x_rate_limit = 1
+  _pyjsmo_x_last_req = 0
+
   def __init__(self, serial_port):
     self.port = serial_port
     self.__serial = serial.Serial(
@@ -68,8 +73,10 @@ class M701x:
     """ sends a command to device and parses reply """
     i = 0
     while i < retries:
-
-      time.sleep(1) # M701x has a rate limit of 1 call per second?!
+      _d = time.time() - self._pyjsmo_x_last_req
+      if _d < self._pyjsmo_x_rate_limit:
+        time.sleep(_d or self._pyjsmo_x_rate_limit)
+      self._pyjsmo_x_last_req = time.time()
 
       self._flush()
       self._write(command)
