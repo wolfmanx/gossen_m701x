@@ -55,6 +55,186 @@ except ImportError:
 
   dbg_fwid = 25
 
+if isinstance(ucs('0').encode('utf-8')[0], int):
+  byte_ord = lambda _c: _c
+else:
+  byte_ord = ord
+
+UDOLLAR = ucs('$')
+USEMICOLON = ucs(';')
+
+class STString(uc_type):                                   # ||:cls:||
+  r"""Generalized SECUTEST string.
+
+  **Parse DOS String**
+
+  >>> dos_string = ucs('März').encode(STString.transfer_encoding)
+
+  >>> ans = STString.parse_raw(dos_string)
+  >>> ans == False
+  False
+
+  >>> printf(nts(ans))
+  März
+
+  >>> printf(nts(ans.uraw))
+  März$e1
+
+  >>> ans._dump()
+  e1 None [März]
+
+  **Parse Unicode String**
+
+  >>> ans = STString.parse(ucs('März'))
+  >>> ans == False
+  False
+
+  >>> printf(nts(ans))
+  März
+
+  >>> printf(nts(ans.uraw))
+  März$e1
+
+  >>> ans._dump()
+  e1 None [März]
+
+  **Parse Native String**
+
+  >>> ans = STString.parse('März', 'utf-8')
+  >>> ans == False
+  False
+
+  >>> printf(nts(ans))
+  März
+
+  >>> printf(nts(ans.uraw))
+  März$e1
+
+  >>> ans._dump()
+  e1 None [März]
+
+  **Invalid Checksum**
+
+  >>> dos_string = ucs('März$E2').encode(STString.transfer_encoding)
+
+  >>> ans = STString.parse_raw(dos_string)
+  >>> ans == False
+  True
+
+  >>> printf(nts(ans))
+  März
+
+  >>> printf(nts(ans.uraw))
+  März$e1
+
+  >>> ans._dump()
+  e1 e2 [März]
+
+  **Multi String**
+
+  >>> _id = 'IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52$30'
+  >>> _mstr = ';'.join((_id, _id))
+
+  >>> ans = STString.parse(_mstr)
+  >>> ans == False
+  False
+
+  >>> printf(nts(ans))
+  IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52;IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52
+
+  >>> printf(nts(ans.uraw))
+  IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52$30;IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52$30
+
+  >>> ans._dump()
+  30 30 [IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52]
+  30 30 [IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52]
+
+  >>> for _p, _cc, _cs in ans.parts:
+  ...     printf(nts(_p))
+  IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52
+  IDN0=0;GMN;SECUTEST-PSI;M702F;AW;19. März 2014  10:15:52
+
+  **Predefined Empty String with Checksum Error**
+
+  >>> CHECKSUM_ERROR == False
+  True
+
+  >>> nts(CHECKSUM_ERROR)
+  ''
+
+  """
+
+  transfer_encoding = 'cp437'
+  raw = None
+  uraw = None
+  parts = []
+  checksum_ok = False
+
+  @staticmethod
+  def _checksum(str, encoding=None):                         # |:mth:|
+    """ calculates checksum of a request/answer """
+    str = ucs(str, encoding).encode(STString.transfer_encoding)
+    qsum_dec = ord('$')
+    for i in str:
+      d = byte_ord(i)
+      qsum_dec += d
+    return "%02x" % (qsum_dec & 0xff)
+
+  @staticmethod
+  def parse(str, encoding=None):                             # |:mth:|
+
+    ustr = ucs(str, encoding or 'utf8')
+    parts = []
+    checksum_ok = True
+
+    _rest = re.sub('[\r\n]+', '', ustr)
+    while _rest:
+      mo = re.search('[$]([0-9a-f][0-9a-f])(;)?(?i)', _rest)
+      if not mo:
+        _part = _rest
+        _chksum = None
+        _rest = None
+      else:
+        _part = _rest[:mo.start(0)]
+        _chksum = mo.group(1).lower()
+        _rest = _rest[mo.end(0):]
+      _chkcalc = STString._checksum(_part)
+      parts.append((_part, _chkcalc, _chksum))
+      checksum_ok = checksum_ok and (_chksum is None or _chksum == _chkcalc)
+
+    _dollar_parts = []
+    _plain_parts = []
+    for _p, _cc, _cs in parts:
+      _dollar_parts.append(UDOLLAR.join((_p, _cc)))
+      _plain_parts.append(_p)
+
+    _dstr = USEMICOLON.join(_dollar_parts)
+    _pstr = USEMICOLON.join(_plain_parts)
+
+    sstr = STString(_pstr)
+    sstr.parts = parts
+    sstr.checksum_ok = checksum_ok
+    sstr.raw = _dstr.encode(STString.transfer_encoding)
+    sstr.uraw = _dstr
+    return sstr
+
+  @staticmethod
+  def parse_raw(str):                                        # |:mth:|
+    return STString.parse(str, STString.transfer_encoding)
+
+  def __eq__(self, other):                                   # |:mth:|
+    r"""If comparing to boolean True/False, compare self.checksum_ok"""
+    if other in (True, False):
+      return self.checksum_ok == other
+    return uc_type(self) == other
+
+  def _dump(self):                                           # |:mth:|
+    r""" """
+    for _p in self.parts:
+      printf(nts(sformat(ucs('{1} {2} [{0}]'), *_p)))
+
+CHECKSUM_ERROR = STString.parse('$25')
+
 class M701x(object):
   """ Class for interfacing with Gossen Metrawatt devices over serial """
 
