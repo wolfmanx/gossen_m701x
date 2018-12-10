@@ -330,12 +330,17 @@ class M701x(object):
 
   def vrequest_(self, method, *args):
     _success, _answer = getattr(self, method)(*args)
-    printe(sformat(
-      "#    "":DBG:    {1:<{0}s}: ]{2!s:<14s}[ ]{3!s:<5s}[ ]{4!s}[", dbg_fwid,
-      "req/succ/answer", sformat('{0}({1})', method, ', '.join(args)),
-      _success, nts(_answer)))
     if len(_answer.parts) > 1:
+      printe(sformat(
+        "#    "":DBG:    {1:<{0}s}: ]{2!s:<14s}[ ]{3!s:<5s}[", dbg_fwid,
+        "req/succ/answer", sformat('{0}({1})', method, ', '.join(args)),
+        _success))
       _answer._dump()
+    else:
+      printe(sformat(
+        "#    "":DBG:    {1:<{0}s}: ]{2!s:<14s}[ ]{3!s:<5s}[ ]{4!s}[", dbg_fwid,
+        "req/succ/answer", sformat('{0}({1})', method, ', '.join(args)),
+        _success, nts(_answer)))
     return _success, _answer
 
   def vrequest(self, *args):
