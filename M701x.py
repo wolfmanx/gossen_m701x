@@ -222,7 +222,18 @@ class STString(uc_type):                                   # ||:cls:||
   def parse_raw(str):                                        # |:mth:|
     return STString.parse(str, STString.transfer_encoding)
 
-  def _slice(self, _from, _to):                             # |:mth:|
+  def process(self):                                         # |:mth:|
+      # on NACK return False and full answer
+      if (self[:2] == '.N'):
+        return False, self._slice(2, None)
+      # on ACK return True and address of device
+      elif (self[:2] == '.Y'):
+        return True, self._slice(2, None)
+      # on 'string answer' or unhandled answer return None and full answer
+      else:
+        return None, self
+
+  def _slice(self, _from, _to):                              # |:mth:|
     sstr = self.__class__(self[_from:_to])
     for _attr in ('raw', 'uraw', 'parts', 'checksum_ok'):
       setattr(sstr, _attr, getattr(self, _attr))
@@ -291,15 +302,7 @@ class M701x(object):
     self.__serial.flushInput()
 
   def _process_answer(self, answer):
-      # on NACK return False and full answer
-      if (answer[:2] == '.N'):
-        return False, answer._slice(2, None)
-      # on ACK return True and address of device
-      elif (answer[:2] == '.Y'):
-        return True, answer._slice(2, None)
-      # on 'string answer' or unhandled answer return None and full answer
-      else:
-        return None,answer
+    return answer.process()
 
   def request(self,command,retries=3):
     """ sends a command to device and parses reply """
