@@ -290,6 +290,17 @@ class M701x(object):
     """ discards all waiting answers in the buffer """
     self.__serial.flushInput()
 
+  def _process_answer(self, answer):
+      # on NACK return False and full answer
+      if (answer[:2] == '.N'):
+        return False, answer._slice(2, None)
+      # on ACK return True and address of device
+      elif (answer[:2] == '.Y'):
+        return True, answer._slice(2, None)
+      # on 'string answer' or unhandled answer return None and full answer
+      else:
+        return None,answer
+
   def request(self,command,retries=3):
     """ sends a command to device and parses reply """
     i = 0
@@ -308,15 +319,8 @@ class M701x(object):
       if ((answer == False) or (answer[:2] == '.N' and answer[3:7] == '=101')):
         i+=1
         continue
-      # on NACK return False and full answer
-      elif (answer[:2] == '.N'):
-        return False, answer._slice(2, None)
-      # on ACK return True and address of device
-      elif (answer[:2] == '.Y'):
-        return True, answer._slice(2, None)
-      # on 'string answer' or unhandled answer return None and full answer
       else:
-        return None,answer
+        return self._process_answer(answer)
     # if not sucessful within retries return False
     else:
       return False,answer
